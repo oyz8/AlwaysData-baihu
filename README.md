@@ -1,4 +1,4 @@
-# 🐯 白虎面板 AlwaysData 一键安装脚本
+# 白虎面板 AlwaysData 一键安装脚本
 
 > ⭐ **如果对你有帮助，欢迎点个 Star 支持一下！**
 > 👉 注册地址：[https://admin.alwaysdata.com/](https://admin.alwaysdata.com/)
