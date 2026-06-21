@@ -2,13 +2,11 @@
 set -euo pipefail
 
 ########################################
-# AlwaysData 白虎面板安装脚本
+# AlwaysData 白虎面板安装脚本 (带版本选择)
 ########################################
 
 BAIHU_USER=$(whoami)
 BAIHU_HOME="/home/${BAIHU_USER}/www"
-BAIHU_VERSION="v1.0.39"
-BAIHU_URL="https://github.com/engigu/baihu-panel/releases/download/${BAIHU_VERSION}/baihu-linux-amd64.tar.gz"
 
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; RED='\033[0;31m'; NC='\033[0m'
 
@@ -22,6 +20,81 @@ echo "=========================================="
 echo "  AlwaysData 白虎面板简易安装"
 echo "=========================================="
 echo ""
+
+# ---------- 版本选择 ----------
+get_latest_version() {
+    local api="https://api.github.com/repos/engigu/baihu-panel/releases/latest"
+    local json
+    json=$(curl -sSf "$api" 2>/dev/null) || return 1
+    python3 -c "import sys,json; print(json.load(sys.stdin)['tag_name'])" <<< "$json" 2>/dev/null || \
+    python -c "import sys,json; print(json.load(sys.stdin)['tag_name'])" <<< "$json"
+}
+
+get_release_list() {
+    local api="https://api.github.com/repos/engigu/baihu-panel/releases?per_page=20"
+    local json
+    json=$(curl -sSf "$api" 2>/dev/null) || return 1
+    python3 -c "import sys,json; [print(r['tag_name']) for r in json.load(sys.stdin)]" <<< "$json" 2>/dev/null || \
+    python -c "import sys,json; [print(r['tag_name']) for r in json.load(sys.stdin)]" <<< "$json"
+}
+
+DEFAULT_VERSION="v1.0.45"   # 网络失败时的兜底版本
+BAIHU_VERSION=""
+
+echo "请选择安装版本:"
+echo "  1) 最新版 (推荐)"
+echo "  2) 从发布列表中选择"
+echo "  3) 手动输入版本号 (例如 v1.0.45)"
+read -p "请输入选项 [1]: " ver_choice
+ver_choice=${ver_choice:-1}
+
+case "$ver_choice" in
+    1)
+        log_info "正在获取最新版本..."
+        BAIHU_VERSION=$(get_latest_version) || {
+            log_warn "无法获取最新版本，使用默认版本 ${DEFAULT_VERSION}"
+            BAIHU_VERSION="$DEFAULT_VERSION"
+        }
+        log_ok "选择版本: ${BAIHU_VERSION}"
+        ;;
+    2)
+        log_info "正在获取版本列表..."
+        mapfile -t versions < <(get_release_list || true)
+        if [ ${#versions[@]} -eq 0 ]; then
+            log_warn "获取列表失败，使用默认版本 ${DEFAULT_VERSION}"
+            BAIHU_VERSION="$DEFAULT_VERSION"
+        else
+            echo "可用版本:"
+            for i in "${!versions[@]}"; do
+                printf "  %2d) %s\n" $((i+1)) "${versions[$i]}"
+            done
+            read -p "请输入序号 [1]: " idx
+            idx=${idx:-1}
+            if [[ "$idx" =~ ^[0-9]+$ ]] && [ "$idx" -ge 1 ] && [ "$idx" -le "${#versions[@]}" ]; then
+                BAIHU_VERSION="${versions[$((idx-1))]}"
+            else
+                log_warn "序号无效，使用第一个版本 ${versions[0]}"
+                BAIHU_VERSION="${versions[0]}"
+            fi
+            log_ok "选择版本: ${BAIHU_VERSION}"
+        fi
+        ;;
+    3)
+        read -p "请输入版本号 (如 v1.0.39): " BAIHU_VERSION
+        if [[ ! "$BAIHU_VERSION" =~ ^v ]]; then
+            log_err "版本号必须以 'v' 开头"
+            exit 1
+        fi
+        ;;
+    *)
+        log_err "无效选项"
+        exit 1
+        ;;
+esac
+
+BAIHU_URL="https://github.com/engigu/baihu-panel/releases/download/${BAIHU_VERSION}/baihu-linux-amd64.tar.gz"
+
+# ---------- 安装流程 ----------
 
 # 1. 准备 & 清理旧进程
 log_info "准备安装环境..."
@@ -40,7 +113,7 @@ fi
 log_info "下载白虎面板 ${BAIHU_VERSION}..."
 rm -f baihu baihu-linux-amd64.tar.gz 2>/dev/null || true
 if ! wget -q --show-progress -O baihu-linux-amd64.tar.gz "$BAIHU_URL"; then
-    log_err "下载失败"
+    log_err "下载失败，请检查版本号或网络"
     exit 1
 fi
 
