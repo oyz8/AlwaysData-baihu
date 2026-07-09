@@ -95,12 +95,77 @@ esac
 BAIHU_URL="https://github.com/engigu/baihu-panel/releases/download/${BAIHU_VERSION}/baihu-linux-amd64.tar.gz"
 
 # ---------- 安装流程 ----------
-
-# 1. 准备 & 清理旧进程
 log_info "准备安装环境..."
 mkdir -p "$BAIHU_HOME"
 cd "$BAIHU_HOME"
 
+# ========== 增强防呆：检测已有程序和文件 ==========
+EXISTING_BAIHU=false
+EXISTING_CONFIG=false
+EXISTING_DATA=false
+EXISTING_LOGS=false
+
+if [ -f "./baihu" ]; then
+    EXISTING_BAIHU=true
+fi
+if [ -f "./configs/config.ini" ]; then
+    EXISTING_CONFIG=true
+fi
+if [ -d "./data" ] && [ "$(ls -A ./data 2>/dev/null)" ]; then
+    EXISTING_DATA=true
+fi
+if [ -d "./logs" ] && [ "$(ls -A ./logs 2>/dev/null)" ]; then
+    EXISTING_LOGS=true
+fi
+
+if $EXISTING_BAIHU || $EXISTING_CONFIG || $EXISTING_DATA; then
+    echo ""
+    log_warn "检测到已有安装痕迹，当前状态："
+    echo "  主程序 (baihu):      $($EXISTING_BAIHU && echo '存在' || echo '无')"
+    echo "  配置文件 (config.ini): $($EXISTING_CONFIG && echo '存在' || echo '无')"
+    echo "  数据目录 (data):      $($EXISTING_DATA && echo '存在（含文件）' || echo '无')"
+    echo "  日志目录 (logs):      $($EXISTING_LOGS && echo '存在（含文件）' || echo '无')"
+    echo ""
+    echo "请选择操作："
+    echo "  1) 覆盖安装（保留现有数据和配置，仅更新主程序）"
+    echo "  2) 全新安装（备份旧目录后，删除所有旧文件）"
+    echo "  3) 取消安装"
+    read -p "请输入选项 [3]: " conflict_choice
+    conflict_choice=${conflict_choice:-3}
+
+    case "$conflict_choice" in
+        1)
+            log_info "将仅覆盖主程序，配置文件和数据目录保持不变。"
+            ;;
+        2)
+            BACKUP_DIR="${BAIHU_HOME}_backup_$(date +%Y%m%d_%H%M%S)"
+            log_info "备份旧目录到: ${BACKUP_DIR}"
+            mkdir -p "$BACKUP_DIR"
+            # 移动旧文件到备份目录（忽略错误）
+            if $EXISTING_BAIHU; then
+                mv ./baihu "$BACKUP_DIR/" 2>/dev/null || true
+            fi
+            if $EXISTING_CONFIG; then
+                mv ./configs "$BACKUP_DIR/" 2>/dev/null || true
+            fi
+            if $EXISTING_DATA; then
+                mv ./data "$BACKUP_DIR/" 2>/dev/null || true
+            fi
+            if $EXISTING_LOGS; then
+                mv ./logs "$BACKUP_DIR/" 2>/dev/null || true
+            fi
+            rm -f baihu-linux-amd64.tar.gz 2>/dev/null || true
+            log_ok "旧文件已备份，开始全新安装。"
+            ;;
+        3|*)
+            log_info "已取消安装，保留现有文件。"
+            rm -f baihu-linux-amd64.tar.gz 2>/dev/null || true
+            exit 0
+            ;;
+    esac
+fi
+
+# 停止旧进程（如果正在运行）
 if pgrep -f "baihu server" >/dev/null 2>&1; then
     log_warn "停止旧进程..."
     pkill -f "baihu server" 2>/dev/null || true
@@ -109,7 +174,7 @@ if pgrep -f "baihu server" >/dev/null 2>&1; then
     sleep 1
 fi
 
-# 2. 下载
+# 下载
 log_info "下载白虎面板 ${BAIHU_VERSION}..."
 rm -f baihu baihu-linux-amd64.tar.gz 2>/dev/null || true
 if ! wget -q --show-progress -O baihu-linux-amd64.tar.gz "$BAIHU_URL"; then
@@ -117,7 +182,7 @@ if ! wget -q --show-progress -O baihu-linux-amd64.tar.gz "$BAIHU_URL"; then
     exit 1
 fi
 
-# 3. 解压
+# 解压
 log_info "解压安装..."
 tar -xzf baihu-linux-amd64.tar.gz
 mv baihu-linux-amd64 baihu
@@ -125,10 +190,11 @@ chmod +x baihu
 rm -f baihu-linux-amd64.tar.gz
 log_ok "主程序就绪"
 
-# 4. 配置文件
-log_info "生成配置..."
-mkdir -p configs logs
-cat > configs/config.ini << 'EOF'
+# 配置文件（仅在不存在时创建）
+if [ ! -f "./configs/config.ini" ]; then
+    log_info "生成配置文件..."
+    mkdir -p configs logs
+    cat > configs/config.ini << 'EOF'
 [server]
 port = 8100
 host = 0.0.0.0
@@ -143,9 +209,15 @@ password =
 dbname = ql_panel
 table_prefix = baihu_
 EOF
-log_ok "配置已写入"
+    log_ok "配置已写入"
+else
+    log_info "检测到已有配置文件，将保留。"
+fi
 
-# 5. 首次启动获取默认密码
+# 确保日志目录存在
+mkdir -p logs
+
+# 首次启动获取默认密码
 log_info "首次启动，获取默认密码..."
 nohup ./baihu server > logs/baihu-init.log 2>&1 &
 BAIHU_PID=$!
@@ -165,7 +237,7 @@ done
 kill "$BAIHU_PID" 2>/dev/null || true
 wait "$BAIHU_PID" 2>/dev/null || true
 
-# 6. 完成
+# ========== 安装完成提示 ==========
 echo ""
 echo "=========================================="
 echo "  🎉 安装完成！"
