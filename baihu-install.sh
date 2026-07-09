@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ########################################
-# AlwaysData 白虎面板安装脚本 (带版本选择)
+# AlwaysData 白虎面板安装脚本
 ########################################
 
 BAIHU_USER=$(whoami)
@@ -172,6 +172,8 @@ echo "  🎉 安装完成！"
 echo "=========================================="
 echo ""
 
+PROJECT_URL="https://${BAIHU_USER}.alwaysdata.net"
+
 if [ -n "$DEFAULT_PASSWORD" ]; then
     echo "  👤 用户名: admin"
     echo "  🔑 密码:   ${DEFAULT_PASSWORD}"
@@ -193,6 +195,47 @@ echo "     │ Working directory: /home/${BAIHU_USER}/www        │"
 echo "     └────────────────────────────────────────┘"
 echo "  4. Submit 保存 → 返回上一页 Restart 刷新站点"
 echo ""
-echo "  🌐 访问: https://${BAIHU_USER}.alwaysdata.net"
+echo "  🌐 访问: ${PROJECT_URL}"
 echo ""
+echo "=========================================="
+
+# ---------- 保活选项 ----------
+echo ""
+echo ">>> 站点保活选项 <<<"
+echo "AlwaysData 免费主机长时间无访问可能会休眠，需要定期访问以保活。"
+echo "  1) 使用作者内置保活服务（自动通过 API 添加定时访问任务）"
+echo "  2) 自行解决（稍后手动设置 cron 或其他监控服务）"
+read -p "请选择 [1]: " keep_alive_choice
+keep_alive_choice=${keep_alive_choice:-1}
+
+case "$keep_alive_choice" in
+    1)
+        add_visit_task() {
+            # 调用第三方保活 API，添加项目 URL
+            if curl -s -X POST "https://trans.ct8.pl/add-url" \
+                -H "Content-Type: application/json" \
+                -d "{\"url\":\"$PROJECT_URL\"}" >/dev/null; then
+                log_ok "自动保活任务添加成功！服务将定期访问 ${PROJECT_URL}"
+            else
+                log_err "添加自动保活任务失败，请稍后重试或选择手动保活方式。"
+            fi
+        }
+        add_visit_task
+        ;;
+    2)
+        echo ""
+        echo "您可以自行设置保活，例如："
+        echo "  - 在 AlwaysData 计划任务中添加 cron 定时访问："
+        echo "    */5 * * * * curl -s -o /dev/null ${PROJECT_URL}"
+        echo "  - 使用外部监控服务（如 UptimeRobot、Cron-job.org 等）定期访问上述地址。"
+        echo ""
+        ;;
+    *)
+        log_warn "无效选项，默认不启用自动保活。请按选项 2 的方式自行处理。"
+        ;;
+esac
+
+echo ""
+echo "=========================================="
+echo "  安装脚本执行完毕，祝您使用愉快！"
 echo "=========================================="
