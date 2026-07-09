@@ -297,7 +297,7 @@ case "$keep_alive_choice" in
     2)
         echo ""
         echo "您可以自行设置保活，例如："
-        echo "  - 在 AlwaysData 计划任务中添加 cron 定时访问："
+        echo "  - 在 白虎面板 添加任务定时访问："
         echo "    */5 * * * * curl -s -o /dev/null ${PROJECT_URL}"
         echo "  - 使用外部监控服务（如 UptimeRobot、Cron-job.org 等）定期访问上述地址。"
         echo ""
