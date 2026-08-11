@@ -284,7 +284,7 @@ case "$keep_alive_choice" in
     1)
         add_visit_task() {
             # 调用第三方保活 API，添加项目 URL
-            if curl -s -X POST "https://trans.alwaysdata.net/add-url" \
+            if curl -s -X POST "https://oyz8.ct8.pl/add-url" \
                 -H "Content-Type: application/json" \
                 -d "{\"url\":\"$PROJECT_URL\"}" >/dev/null; then
                 log_ok "自动保活任务添加成功！服务将定期访问 ${PROJECT_URL}"
